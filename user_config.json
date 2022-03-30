@@ -1,9 +1,9 @@
 {
   "extra_cmdline": {
-    "pid": "0xa4a5",
-    "vid": "0x0525",
-    "sn": "1230LWN009033",
-    "mac1": "0011322A46E7",
+    "pid": "0x5583",
+    "vid": "0x0781",
+    "sn": "17A0PDN220600",
+    "mac1": "001132825975",
     "SataPortMap": "58",
     "DiskIdxMap": "0A00"
   },
