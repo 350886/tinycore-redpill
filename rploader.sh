@@ -1,13 +1,13 @@
 #!/bin/bash
 #
 # Author :
-# Date : 22290318
-# Version : 0.6.0.1
+# Date : 22300322
+# Version : 0.6.0.4
 #
 #
 # User Variables :
 
-rploaderver="0.6.0.1"
+rploaderver="0.6.0.4"
 rploaderfile="https://raw.githubusercontent.com/pocopico/tinycore-redpill/main/rploader.sh"
 rploaderrepo="https://github.com/pocopico/tinycore-redpill/raw/main/"
 
@@ -33,6 +33,7 @@ function postupdate() {
 
     if [ $(mount | grep -i dsmroot | wc -l) -le 0 ]; then
         mountdsmroot
+        [ $(mount | grep -i dsmroot | wc -l) -le 0 ] && echo "Failed to mount DSM root, cannot continue the postupdate process, returning" && return
     else
         echo "Already mounted"
     fi
@@ -58,9 +59,15 @@ function postupdate() {
 
     echo "Checking available patch"
 
-    cd /mnt/dsmroot/.syno/patch/
-    . ./VERSION
-    . ./GRUB_VER
+    if [ -d "/mnt/dsmroot/.syno/patch/" ]; then
+        cd /mnt/dsmroot/.syno/patch/
+        . ./VERSION
+        . ./GRUB_VER
+    else
+        echo "Patch directory not found, please remember that you have to run update usign DSM manual upgrade first"
+        echo "Postupdate is not possible, returning"
+        return
+    fi
 
     echo "Found Platform : ${PLATFORM}  Model : $MODEL Version : ${major}.${minor}.${micro}-${buildnumber} "
 
@@ -113,7 +120,12 @@ function postupdate() {
     loaderimg=$(ls -ltr /home/tc/redpill-load/images/${loadername}* | tail -1 | awk '{print $9}')
 
     echo "Moving loader ${loaderimg} to loader.img "
-    mv -f $loaderimg loader.img
+    if [ -f "${loaderimg}" ]; then
+        mv -f $loaderimg loader.img
+    else
+        echo "Failed to find loader ${loaderimg}, exiting"
+        exit 99
+    fi
 
     if [ ! -n "$(losetup -j loader.img | awk '{print $1}' | sed -e 's/://')" ]; then
         echo -n "Setting up loader img loop -> "
@@ -357,7 +369,17 @@ function mountdsmroot() {
     # So a command like the below will list the first partition of a DSM disk
     #blkid /dev/sd* |grep -i raid  | awk '{print $1 " " $4}' |grep UUID | grep "\-01" | awk -F ":" '{print $1}'
 
-    dsmrootdisk="$(blkid /dev/sd* | grep -i raid | awk '{print $1 " " $4}' | grep UUID | grep "\-01" | awk -F ":" '{print $1}' | head -1)"
+    # Make sure we load SCSI modules if SCSI/RAID/SAS HBAs exist on the system
+    #
+    if [ $(lspci -nn | grep -ie "\[0100\]" -ie "\[0104\]" -ie "\[0107\]" | wc -l) -gt 0 ]; then
+        echo "Found SCSI HBAs, We need to install the SCSI modules"
+        tce-load -iw scsi-5.10.3-tinycore64.tcz
+        [ $(losetup | grep -i "scsi-" | wc -l) -gt 0 ] && echo "Succesfully installed SCSI modules"
+    fi
+
+    dsmrootdisk="$(blkid /dev/sd* | grep -i raid | awk '{print $1 " " $4}' | grep UUID | grep sd[a-z]1 | head -1 | awk -F ":" '{print $1}')"
+    # OLD DSM
+    #dsmrootdisk="$(blkid /dev/sd* | grep -i raid | awk '{print $1 " " $4}' | grep UUID | grep "\-01" | awk -F ":" '{print $1}' | head -1)"
 
     [[ ! -d /mnt/dsmroot ]] && mkdir /mnt/dsmroot
 
@@ -1395,6 +1417,7 @@ function getvars() {
     esac
 
     #echo "Platform : $platform_selected"
+    echo "Rploader Version : ${rploaderver}"
     echo "Loader source : $LD_SOURCE_URL Loader Branch : $LD_BRANCH "
     echo "Redpill module source : $LKM_SOURCE_URL : Redpill module branch : $LKM_BRANCH "
     echo "Extensions : $EXTENSIONS "
